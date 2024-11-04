@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.0/p5.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.0/addons/p5.sound.min.js"></script>
+    <meta charset="utf-8" />
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <main></main>
+    <script>
+      let angleSlider, velocitySlider, betaSlider, launchAngleSlider;
+      let ball;
+      let g = 9.8;
+      let startX = 50, startY;
+      let planeLength = 400; // Length of the inclined plane line
+      let previousAngle, previousVelocity, previousBeta, previousLaunchAngle;
+      let timeOfFlight, maxHeight, range;
+      let trajectoryPoints = [];
+      let isMoving = false;
+      let stars = [];
+
+      function setup() {
+        createCanvas(windowWidth, windowHeight);
+        startY = height - 50;
+
+        // Create background stars
+        for (let i = 0; i < 100; i++) {
+          stars.push({ x: random(width), y: random(height / 2) });
+        }
+
+        // Beta slider (for angle between x-axis and inclined plane)
+        betaSlider = createSlider(0, 90, 0);
+        betaSlider.position(width - 180, 50);
+        betaSlider.class("betaSliderClass");
+
+        // Launch angle slider (angle between inclined plane and launch)
+        launchAngleSlider = createSlider(0, 90, 45);
+        launchAngleSlider.position(width - 180, 100);
+        launchAngleSlider.class("launchAngleSliderClass");
+
+        // Velocity slider
+        velocitySlider = createSlider(0, 100, 50);
+        velocitySlider.position(width - 180, 150);
+        velocitySlider.class("velocitySliderClass");
+
+        initializeBall();
+
+        previousBeta = betaSlider.value();
+        previousLaunchAngle = launchAngleSlider.value();
+        previousVelocity = velocitySlider.value();
+
+        calculateTrajectory();
+      }
+
+      function windowResized() {
+        resizeCanvas(windowWidth, windowHeight);
+        startY = height - 50;
+        calculateTrajectory();
+      }
+
+      function initializeBall() {
+        ball = {
+          x: startX,
+          y: startY,
+          vx: 0,
+          vy: 0,
+          ax: 0,
+          ay: g
+        };
+        trajectoryPoints = [];
+        isMoving = false;
+      }
+
+      function calculateTrajectory() {
+        let beta = radians(betaSlider.value());
+        let launchAngle = radians(launchAngleSlider.value());
+        let velocity = velocitySlider.value();
+
+        // Effective gravity component along the plane
+        let effectiveG = g * cos(beta);
+
+        // Adjust the launch angle relative to the x-axis
+        let totalAngle = beta + launchAngle;
+
+        timeOfFlight = (2 * velocity * sin(launchAngle)) / effectiveG;
+        maxHeight = (pow(velocity * sin(launchAngle), 2)) / (2 * effectiveG);
+        range = (pow(velocity, 2) * sin(2 * launchAngle)) / effectiveG;
+      }
+
+      function draw() {
+        background(0);
+        drawStars();
+        drawAxes();
+        drawInclinedPlane();
+
+        let beta = radians(betaSlider.value());
+        let launchAngle = radians(launchAngleSlider.value());
+        let velocity = velocitySlider.value();
+
+        // Check if any slider value changed
+        if (
+          betaSlider.value() !== previousBeta ||
+          launchAngleSlider.value() !== previousLaunchAngle ||
+          velocitySlider.value() !== previousVelocity
+        ) {
+          initializeBall();
+          previousBeta = betaSlider.value();
+          previousLaunchAngle = launchAngleSlider.value();
+          previousVelocity = velocitySlider.value();
+          calculateTrajectory();
+        }
+
+        // Display beta, launch angle, and velocity
+        textSize(12);
+        fill(255);
+        text(`Beta: ${betaSlider.value()}°`, width - 160, 35);
+        text(`Launch Angle: ${launchAngleSlider.value()}°`, width - 160, 85);
+        text(`Velocity: ${velocitySlider.value()}`, width - 160, 135);
+
+        let gap = 30;
+        text(`Time of Flight: ${timeOfFlight.toFixed(2)} s`, width - 160, 165 + gap);
+        text(`Max Height: ${maxHeight.toFixed(2)} m`, width - 160, 185 + gap);
+        text(`Range: ${range.toFixed(2)} m`, width - 160, 205 + gap);
+
+        // Initialize ball velocity on first run
+        if (ball.x === startX && ball.y === startY) {
+          let totalAngle = beta + launchAngle;
+          ball.vx = velocity * cos(totalAngle);
+          ball.vy = -velocity * sin(totalAngle);
+          isMoving = true;
+        }
+
+        if (isMoving) {
+          trajectoryPoints.push({ x: ball.x, y: ball.y });
+
+          ball.x += ball.vx * 0.1;
+          ball.vy += ball.ay * 0.1;
+          ball.y += ball.vy * 0.1;
+
+          // Check if the ball has hit the inclined plane
+          let endX = startX + planeLength * cos(beta);
+          let endY = startY - planeLength * sin(beta);
+
+          // Calculate the y position of the plane at the ball's x position
+          let planeY = startY - (tan(beta) * (ball.x - startX));
+
+          // Check for collision with the inclined plane
+          if (ball.y >= planeY && ball.x <= endX) {
+            ball.y = planeY; // Set the ball's y position to the plane
+            ball.vx = 0;
+            ball.vy = 0;
+            isMoving = false;
+          }
+
+          let colorValue = map(ball.y, startY, startY - maxHeight, 0, 255);
+          fill(colorValue, 100, 255 - colorValue);
+          stroke(0);
+          ellipse(ball.x, ball.y, 20, 20);
+
+          if (ball.y > startY) {
+            ball.y = startY;
+            ball.vx = 0;
+            ball.vy = 0;
+            isMoving = false;
+          }
+        }
+
+        // Draw trajectory path
+        noFill();
+        stroke(150);
+        beginShape();
+        for (let point of trajectoryPoints) {
+          vertex(point.x, point.y);
+        }
+        endShape();
+      }
+
+      function drawAxes() {
+        stroke(255);
+        line(0, startY, width, startY);
+        line(startX, 0, startX, height);
+
+        fill(255);
+        text('X', width - 20, startY - 10);
+        text('Y', startX - 20, 20);
+      }
+
+      function drawInclinedPlane() {
+        let beta = radians(betaSlider.value());
+
+        // Extend the line to cover the entire canvas width
+        let endX = startX + width * cos(beta);
+        let endY = startY - width * sin(beta);
+
+        // Draw the inclined plane
+        stroke(255, 0, 0); // Red color for the inclined plane
+        strokeWeight(2);
+        line(startX, startY, endX, endY);
+      }
+
+      function drawStars() {
+        fill(255);
+        noStroke();
+        for (let star of stars) {
+          ellipse(star.x, star.y, 2, 2);
+        }
+      }
+    </script>
+  </body>
+</html>
